@@ -249,8 +249,19 @@ export async function pollAsyncTask(
             return await pollViduTask(parsed.requestId, userId)
         case 'OPENAI':
             return await pollOpenAIVideoTask(parsed.requestId, userId, parsed.providerToken)
-        case 'OCOMPAT':
-            return await pollOCompatTask(parsed.type, parsed.requestId, userId, parsed.providerToken, parsed.modelKeyToken, parsed.templateOperation)
+        case 'OCOMPAT': {
+            if (parsed.type !== 'VIDEO' && parsed.type !== 'IMAGE') {
+                throw new Error(`无效 OCOMPAT 类型: ${parsed.type}`)
+            }
+            return await pollOCompatTask(
+                parsed.type,
+                parsed.requestId,
+                userId,
+                parsed.providerToken,
+                parsed.modelKeyToken,
+                parsed.templateOperation,
+            )
+        }
         case 'BAILIAN':
             return await pollBailianTask(parsed.requestId, userId)
         case 'SILICONFLOW':
@@ -312,7 +323,7 @@ function resolveOCompatModelKey(providerId: string, token: string): string {
 }
 
 async function pollOCompatTask(
-    type: 'VIDEO' | 'IMAGE' | 'BATCH' | 'UNKNOWN',
+    type: 'VIDEO' | 'IMAGE',
     taskId: string,
     userId: string,
     providerToken?: string,
@@ -367,17 +378,27 @@ async function pollOCompatTask(
             error: 'OCOMPAT status path resolve failed',
         }
     }
-    const doneStates = (template.polling?.doneStates || []).map((item) => item.toLowerCase())
-    const failStates = (template.polling?.failStates || []).map((item) => item.toLowerCase())
+    const configuredDoneStates = (template.polling?.doneStates || []).map((item) => item.toLowerCase())
+    const doneStates = configuredDoneStates.length > 0
+        ? configuredDoneStates
+        : ['completed', 'succeeded', 'done']
+    const failStates = new Set([
+        ...(template.polling?.failStates || []).map((item) => item.toLowerCase()),
+        'failed',
+        'error',
+        'expired',
+        'canceled',
+        'cancelled',
+    ])
     if (doneStates.includes(status)) {
-        const outputUrl = readJsonPath(payload, template.response.outputUrlPath)
-        if (typeof outputUrl === 'string' && outputUrl.trim()) {
+        const outputUrl = resolveOCompatOutputUrl(payload, template.response, type)
+        if (outputUrl) {
             return {
                 status: 'completed',
-                resultUrl: outputUrl.trim(),
+                resultUrl: outputUrl,
                 ...(type === 'VIDEO'
-                    ? { videoUrl: outputUrl.trim() }
-                    : { imageUrl: outputUrl.trim() }),
+                    ? { videoUrl: outputUrl }
+                    : { imageUrl: outputUrl }),
             }
         }
         if (template.content) {
@@ -403,7 +424,7 @@ async function pollOCompatTask(
             error: 'OCOMPAT completed but output URL missing',
         }
     }
-    if (failStates.includes(status)) {
+    if (failStates.has(status)) {
         const errorRaw = readJsonPath(payload, template.response.errorPath)
         return {
             status: 'failed',
@@ -411,6 +432,65 @@ async function pollOCompatTask(
         }
     }
     return { status: 'pending' }
+}
+
+function extractUrlFromUnknown(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+        const trimmed = value.trim()
+        return trimmed || undefined
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const nested = extractUrlFromUnknown(item)
+            if (nested) return nested
+        }
+        return undefined
+    }
+
+    if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>
+        const directUrl = extractUrlFromUnknown(record.url)
+        if (directUrl) return directUrl
+        const videoUrl = extractUrlFromUnknown(record.video_url)
+        if (videoUrl) return videoUrl
+        const outputUrl = extractUrlFromUnknown(record.output_url)
+        if (outputUrl) return outputUrl
+    }
+
+    return undefined
+}
+
+function resolveOCompatOutputUrl(
+    payload: unknown,
+    response: {
+        outputUrlPath?: string
+        outputUrlsPath?: string
+    },
+    type: 'VIDEO' | 'IMAGE',
+): string | undefined {
+    const candidates: unknown[] = []
+    if (response.outputUrlPath) {
+        candidates.push(readJsonPath(payload, response.outputUrlPath))
+    }
+    if (response.outputUrlsPath) {
+        candidates.push(readJsonPath(payload, response.outputUrlsPath))
+    }
+
+    // xAI / gateway compatibility fallback:
+    // older stored templates may have stale outputUrlPath, while upstream uses nested shapes like $.video.url.
+    const fallbackPaths = type === 'VIDEO'
+        ? ['$.video.url', '$.output_url', '$.video_url', '$.result.video.url', '$.result.url', '$.url', '$.data[0].url']
+        : ['$.data[0].url', '$.url', '$.image.url', '$.result.url', '$.output_url']
+    for (const path of fallbackPaths) {
+        candidates.push(readJsonPath(payload, path))
+    }
+
+    for (const candidate of candidates) {
+        const resolved = extractUrlFromUnknown(candidate)
+        if (resolved) return resolved
+    }
+    return undefined
 }
 
 async function pollOpenAIVideoTask(

@@ -1279,6 +1279,58 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     expect(typeof savedModel?.compatMediaTemplateCheckedAt).toBe('string')
   })
 
+  it('backfills grok default compatMediaTemplate for video model when missing', async () => {
+    installAuthMocks()
+    mockAuthenticated('user-1')
+    const route = await import('@/app/api/user/api-config/route')
+
+    const req = buildMockRequest({
+      path: '/api/user/api-config',
+      method: 'PUT',
+      body: {
+        providers: [
+          { id: 'grok-compatible:gk-1', name: 'Grok Compat', baseUrl: 'https://api.x.ai/v1', apiKey: 'xai-key' },
+        ],
+        models: [
+          {
+            modelId: 'grok-imagine-video',
+            modelKey: 'grok-compatible:gk-1::grok-imagine-video',
+            name: 'Grok Video',
+            type: 'video',
+            provider: 'grok-compatible:gk-1',
+          },
+        ],
+      },
+    })
+
+    const res = await route.PUT(req, routeContext)
+    expect(res.status).toBe(200)
+    const savedModels = readSavedModelsFromUpsert()
+    const savedModel = savedModels.find((item) => item.modelKey === 'grok-compatible:gk-1::grok-imagine-video')
+    expect(savedModel?.compatMediaTemplate).toMatchObject({
+      version: 1,
+      mediaType: 'video',
+      mode: 'async',
+      create: {
+        path: '/videos/generations',
+      },
+      status: {
+        path: '/videos/{{task_id}}',
+      },
+      response: {
+        taskIdPath: '$.request_id',
+        statusPath: '$.status',
+        outputUrlPath: '$.video.url',
+      },
+      polling: {
+        doneStates: ['done'],
+        failStates: ['failed', 'error', 'expired', 'canceled'],
+      },
+    })
+    expect(savedModel?.compatMediaTemplateSource).toBe('manual')
+    expect(typeof savedModel?.compatMediaTemplateCheckedAt).toBe('string')
+  })
+
   it('backfills default compatMediaTemplate for openai-compatible video model when missing', async () => {
     installAuthMocks()
     mockAuthenticated('user-1')

@@ -10,7 +10,7 @@ import {
   type TemplateOperation,
 } from '@/lib/openai-compat-template-runtime'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
-import { resolveOpenAICompatClientConfig } from './common'
+import { resolveOpenAICompatClientConfig, sanitizeTemplateOptions } from './common'
 
 const OPENAI_COMPAT_PROVIDER_PREFIX = 'openai-compatible:'
 const PROVIDER_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -64,6 +64,7 @@ export async function generateVideoViaOpenAICompatTemplate(
   }
 
   const config = await resolveOpenAICompatClientConfig(request.userId, request.providerId)
+  const sanitizedOptions = sanitizeTemplateOptions(request.options)
   const operation = resolveVideoTemplateOperation(request.options)
   const operationTemplate = resolveTemplateOperation(request.template, operation)
   const variables = buildTemplateVariables({
@@ -71,11 +72,11 @@ export async function generateVideoViaOpenAICompatTemplate(
     prompt: request.prompt,
     image: request.imageUrl,
     images: [request.imageUrl],
-    aspectRatio: typeof request.options?.aspectRatio === 'string' ? request.options.aspectRatio : undefined,
-    resolution: typeof request.options?.resolution === 'string' ? request.options.resolution : undefined,
-    size: typeof request.options?.size === 'string' ? request.options.size : undefined,
-    duration: typeof request.options?.duration === 'number' ? request.options.duration : undefined,
-    extra: request.options,
+    aspectRatio: typeof sanitizedOptions?.aspectRatio === 'string' ? sanitizedOptions.aspectRatio : undefined,
+    resolution: typeof sanitizedOptions?.resolution === 'string' ? sanitizedOptions.resolution : undefined,
+    size: typeof sanitizedOptions?.size === 'string' ? sanitizedOptions.size : undefined,
+    duration: typeof sanitizedOptions?.duration === 'number' ? sanitizedOptions.duration : undefined,
+    extra: sanitizedOptions,
   })
 
   const createRequest = await buildRenderedTemplateRequest({

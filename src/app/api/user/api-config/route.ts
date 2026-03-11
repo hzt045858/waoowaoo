@@ -1092,14 +1092,14 @@ function getDefaultMediaTemplate(type: 'image' | 'video', providerId: string): O
       response: {
         taskIdPath: '$.request_id',
         statusPath: '$.status',
-        outputUrlPath: '$.output_url',
+        outputUrlPath: '$.video.url',
         errorPath: '$.error.message',
       },
       polling: {
         intervalMs: 3000,
         timeoutMs: 600000,
         doneStates: ['done'],
-        failStates: ['expired'],
+        failStates: ['failed', 'error', 'expired', 'canceled'],
       },
       operations: {
         generate: {
@@ -1125,14 +1125,14 @@ function getDefaultMediaTemplate(type: 'image' | 'video', providerId: string): O
           response: {
             taskIdPath: '$.request_id',
             statusPath: '$.status',
-            outputUrlPath: '$.output_url',
+            outputUrlPath: '$.video.url',
             errorPath: '$.error.message',
           },
           polling: {
             intervalMs: 3000,
             timeoutMs: 600000,
             doneStates: ['done'],
-            failStates: ['expired'],
+            failStates: ['failed', 'error', 'expired', 'canceled'],
           },
         },
         edit: {
@@ -1158,14 +1158,14 @@ function getDefaultMediaTemplate(type: 'image' | 'video', providerId: string): O
           response: {
             taskIdPath: '$.request_id',
             statusPath: '$.status',
-            outputUrlPath: '$.output_url',
+            outputUrlPath: '$.video.url',
             errorPath: '$.error.message',
           },
           polling: {
             intervalMs: 3000,
             timeoutMs: 600000,
             doneStates: ['done'],
-            failStates: ['expired'],
+            failStates: ['failed', 'error', 'expired', 'canceled'],
           },
         },
       },
