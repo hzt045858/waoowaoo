@@ -3,9 +3,11 @@ import type { OpenAICompatImageRequest } from '../types'
 import {
   buildRenderedTemplateRequest,
   buildTemplateVariables,
-  extractTemplateError,
+  extractTemplateErrorFromResponse,
   normalizeResponseJson,
   readJsonPath,
+  resolveTemplateOperation,
+  type TemplateOperation,
 } from '@/lib/openai-compat-template-runtime'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { resolveOpenAICompatClientConfig } from './common'
@@ -67,6 +69,8 @@ export async function generateImageViaOpenAICompatTemplate(
   const firstReference = Array.isArray(request.referenceImages) && request.referenceImages.length > 0
     ? request.referenceImages[0]
     : ''
+  const operation: TemplateOperation = firstReference ? 'edit' : 'generate'
+  const operationTemplate = resolveTemplateOperation(request.template, operation)
   const variables = buildTemplateVariables({
     model: request.modelId || 'gpt-image-1',
     prompt: request.prompt,
@@ -80,7 +84,7 @@ export async function generateImageViaOpenAICompatTemplate(
 
   const createRequest = await buildRenderedTemplateRequest({
     baseUrl: config.baseUrl,
-    endpoint: request.template.create,
+    endpoint: operationTemplate.create,
     variables,
     defaultAuthHeader: `Bearer ${config.apiKey}`,
   })
@@ -95,12 +99,19 @@ export async function generateImageViaOpenAICompatTemplate(
   const rawText = await response.text().catch(() => '')
   const payload = normalizeResponseJson(rawText)
   if (!response.ok) {
-    throw new Error(extractTemplateError(request.template, payload, response.status))
+    throw new Error(extractTemplateErrorFromResponse(operationTemplate.response, payload, response.status))
   }
 
-  if (request.template.mode === 'sync') {
+  if (operationTemplate.mode === 'sync') {
+    const outputUrl = readJsonPath(payload, operationTemplate.response.outputUrlPath)
+    if (typeof outputUrl === 'string' && outputUrl.trim().length > 0) {
+      return {
+        success: true,
+        imageUrl: outputUrl.trim(),
+      }
+    }
     const outputUrls = readTemplateOutputUrls(
-      readJsonPath(payload, request.template.response.outputUrlsPath),
+      readJsonPath(payload, operationTemplate.response.outputUrlsPath),
     )
     if (outputUrls.length > 0) {
       const first = outputUrls[0]
@@ -110,18 +121,10 @@ export async function generateImageViaOpenAICompatTemplate(
         ...(outputUrls.length > 1 ? { imageUrls: outputUrls } : {}),
       }
     }
-
-    const outputUrl = readJsonPath(payload, request.template.response.outputUrlPath)
-    if (typeof outputUrl === 'string' && outputUrl.trim().length > 0) {
-      return {
-        success: true,
-        imageUrl: outputUrl.trim(),
-      }
-    }
     throw new Error('OPENAI_COMPAT_IMAGE_TEMPLATE_OUTPUT_NOT_FOUND')
   }
 
-  const taskIdRaw = readJsonPath(payload, request.template.response.taskIdPath)
+  const taskIdRaw = readJsonPath(payload, operationTemplate.response.taskIdPath)
   const taskId = typeof taskIdRaw === 'string' ? taskIdRaw.trim() : ''
   if (!taskId) {
     throw new Error('OPENAI_COMPAT_IMAGE_TEMPLATE_TASK_ID_NOT_FOUND')
@@ -132,6 +135,6 @@ export async function generateImageViaOpenAICompatTemplate(
     success: true,
     async: true,
     requestId: taskId,
-    externalId: `OCOMPAT:IMAGE:${providerToken}:${modelRefToken}:${taskId}`,
+    externalId: `OCOMPAT:IMAGE:${providerToken}:${modelRefToken}:${operation}:${taskId}`,
   }
 }
