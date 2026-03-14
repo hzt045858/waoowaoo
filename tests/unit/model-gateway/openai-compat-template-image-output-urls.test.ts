@@ -8,6 +8,20 @@ const resolveConfigMock = vi.hoisted(() => vi.fn(async () => ({
 
 vi.mock('@/lib/model-gateway/openai-compat/common', () => ({
   resolveOpenAICompatClientConfig: resolveConfigMock,
+  sanitizeTemplateOptions: (options?: Record<string, unknown>) => {
+    if (!options) return undefined
+    const sanitized: Record<string, unknown> = {}
+    for (const [key, rawValue] of Object.entries(options)) {
+      if (typeof rawValue === 'string') {
+        const trimmed = rawValue.trim()
+        if (!trimmed) continue
+        sanitized[key] = trimmed
+        continue
+      }
+      sanitized[key] = rawValue
+    }
+    return Object.keys(sanitized).length > 0 ? sanitized : undefined
+  },
 }))
 
 import { generateImageViaOpenAICompatTemplate } from '@/lib/model-gateway/openai-compat/template-image'

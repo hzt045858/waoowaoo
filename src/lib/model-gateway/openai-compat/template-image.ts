@@ -104,13 +104,6 @@ export async function generateImageViaOpenAICompatTemplate(
   }
 
   if (operationTemplate.mode === 'sync') {
-    const outputUrl = readJsonPath(payload, operationTemplate.response.outputUrlPath)
-    if (typeof outputUrl === 'string' && outputUrl.trim().length > 0) {
-      return {
-        success: true,
-        imageUrl: outputUrl.trim(),
-      }
-    }
     const outputUrls = readTemplateOutputUrls(
       readJsonPath(payload, operationTemplate.response.outputUrlsPath),
     )
@@ -120,6 +113,13 @@ export async function generateImageViaOpenAICompatTemplate(
         success: true,
         imageUrl: first,
         ...(outputUrls.length > 1 ? { imageUrls: outputUrls } : {}),
+      }
+    }
+    const outputUrl = readJsonPath(payload, operationTemplate.response.outputUrlPath)
+    if (typeof outputUrl === 'string' && outputUrl.trim().length > 0) {
+      return {
+        success: true,
+        imageUrl: outputUrl.trim(),
       }
     }
     throw new Error('OPENAI_COMPAT_IMAGE_TEMPLATE_OUTPUT_NOT_FOUND')
