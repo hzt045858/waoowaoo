@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import {
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const {
   API_HANDLER_ALLOWLIST,
   PUBLIC_ROUTE_ALLOWLIST,
   inspectRouteContract,
-} from '../../../scripts/guards/api-route-contract-guard.mjs'
+} = require('../../../scripts/guards/api-route-contract-guard-core.cjs') as {
+  API_HANDLER_ALLOWLIST: Set<string>
+  PUBLIC_ROUTE_ALLOWLIST: Set<string>
+  inspectRouteContract: (relPath: string, content: string) => string[]
+}
 
 describe('api route contract guard', () => {
   it('allows explicit public and framework-managed exceptions', () => {
