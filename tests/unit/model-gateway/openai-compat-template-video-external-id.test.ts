@@ -135,7 +135,8 @@ describe('openai-compat template video externalId', () => {
     })
 
     expect(result.success).toBe(true)
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined
+    const firstCall = fetchMock.mock.calls[0] as unknown as unknown[] | undefined
+    const requestInit = firstCall?.[1] as RequestInit | undefined
     expect(requestInit).toBeTruthy()
     const parsedBody = JSON.parse(String(requestInit?.body))
     expect(parsedBody.resolution).toBeUndefined()
